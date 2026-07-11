@@ -6,7 +6,7 @@
 const DEFAULT_TIMEOUT_MS = 300_000; // 5 minutes
 const MAX_RETRIES = 3;
 const RETRY_BASE_DELAY_MS = 5_000; // 5s, 10s, 20s exponential backoff
-const OPENCLAW_GATEWAY_MODEL = 'openclaw/default';
+const OPENCLAW_GATEWAY_MODEL = process.env.OPENCLAW_GATEWAY_MODEL || 'openclaw/default';
 
 function getGatewayUrl(): string {
   return process.env.OPENCLAW_GATEWAY_URL?.replace('ws://', 'http://').replace('wss://', 'https://') || 'http://127.0.0.1:18789';

@@ -149,6 +149,10 @@ export class OpenClawClient extends EventEmitter {
         this.performCacheCleanup();
       }, this.PERIODIC_CLEANUP_INTERVAL_MS);
 
+      // Don't let this background timer, on its own, keep the process alive —
+      // the server has the HTTP listener for that, and test runners must exit.
+      timer.unref();
+
       // Store the timer globally so all instances share it
       (globalThis as Record<string, unknown>)[GLOBAL_CACHE_CLEANUP_KEY] = timer;
       console.log('[OpenClaw] Started periodic cache cleanup (interval:', this.PERIODIC_CLEANUP_INTERVAL_MS, 'ms)');

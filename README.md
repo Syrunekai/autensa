@@ -76,7 +76,6 @@ The Autopilot product settings modal now includes a **Status** dropdown (Active 
 <summary>v2.4.1 — Community Bug Fixes</summary>
 
 - **Autopilot model routing** — Provider models now route through `openclaw/default` with the original model in `x-openclaw-model`, fixing 404 errors on OpenClaw deployments. ([@Ahmedkasmi-dev](https://github.com/Ahmedkasmi-dev), [#109](https://github.com/crshdn/mission-control/pull/109))
-- **AUTOPILOT_MODEL env var** — Removed hardcoded model override in description generation so the shared `AUTOPILOT_MODEL` config is respected. ([@aaronmeza](https://github.com/aaronmeza), [#116](https://github.com/crshdn/mission-control/pull/116))
 - **Gateway catalog sync** — Local agent role assignments are now preserved during gateway sync instead of being overwritten every 60 seconds. ([@cgluttrell](https://github.com/cgluttrell), [#119](https://github.com/crshdn/mission-control/pull/119))
 - **Task chat reliability** — Agent replies are now captured even without an active SSE connection, and the "waiting" indicator no longer shows stale state. ([@heliokeplert-ctrl](https://github.com/heliokeplert-ctrl), [#126](https://github.com/crshdn/mission-control/pull/126))
 </details>
@@ -467,17 +466,29 @@ Subtasks run in parallel with dependency-aware scheduling. Health monitoring det
 |:---------|:--------:|:--------|:------------|
 | `OPENCLAW_GATEWAY_URL` | ✅ | `ws://127.0.0.1:18789` | WebSocket URL to OpenClaw Gateway |
 | `OPENCLAW_GATEWAY_TOKEN` | ✅ | — | Authentication token for OpenClaw |
-| `MC_API_TOKEN` | — | — | API auth token (enables auth middleware) |
-| `WEBHOOK_SECRET` | — | — | HMAC secret for webhook validation |
+| `MC_UI_TOKEN` | prod | — | Browser login access key (whole app behind `/login`) |
+| `MC_API_TOKEN` | prod | — | API bearer token for automation |
+| `WEBHOOK_SECRET` | — | — | HMAC secret for webhook validation (unset ⇒ webhook rejects requests) |
 | `DATABASE_PATH` | — | `./mission-control.db` | SQLite database location |
 | `WORKSPACE_BASE_PATH` | — | `~/Documents/Shared` | Base directory for workspace files |
 | `PROJECTS_PATH` | — | `~/Documents/Shared/projects` | Directory for project folders |
 
 ### Security (Production)
 
+The entire app — pages and API — sits behind authentication:
+
+- **Browser access** — log in once at `/login` with the access key (`MC_UI_TOKEN`); a signed, expiring, `HttpOnly` session cookie keeps you logged in (30-day sliding renewal, 90-day absolute cap). Rotating `MC_UI_TOKEN` invalidates every browser session.
+- **Automation / API access** — send `Authorization: Bearer <MC_API_TOKEN>` on every request, SSE streams included (query-param tokens are not accepted).
+- **CSRF** — cookie-authenticated API requests are accepted only from same-origin browser contexts (`Sec-Fetch-Site` guard); bearer requests are exempt. Non-browser tools should use the bearer rail.
+- **Fail closed** — in production the server refuses to serve (503 on every route) if `MC_UI_TOKEN` or `MC_API_TOKEN` is unset, or `DEMO_MODE` is set.
+- **Webhooks** — `/api/webhooks/*` authenticate with their own HMAC signatures and reject all requests when their secret is unset.
+
 Generate secure tokens:
 
 ```bash
+# Browser login access key
+openssl rand -base64 24
+
 # API authentication token
 openssl rand -hex 32
 
@@ -488,14 +499,10 @@ openssl rand -hex 32
 Add to `.env.local`:
 
 ```env
+MC_UI_TOKEN=your-browser-access-key
 MC_API_TOKEN=your-64-char-hex-token
 WEBHOOK_SECRET=your-64-char-hex-token
 ```
-
-When `MC_API_TOKEN` is set:
-- External API calls require `Authorization: Bearer <token>`
-- Browser UI works automatically (same-origin requests are allowed)
-- SSE streams accept token as query param
 
 See [PRODUCTION_SETUP.md](PRODUCTION_SETUP.md) for the full production guide.
 

@@ -7,7 +7,8 @@ export const dynamic = 'force-dynamic';
  * GET /api/health/metrics
  *
  * Returns Prometheus text exposition format (text/plain; version=0.0.4).
- * Unauthenticated — designed for scraping by Prometheus/Grafana/etc.
+ * Gated by the auth middleware (session cookie or bearer token); scrapers
+ * must send `Authorization: Bearer MC_API_TOKEN`.
  */
 export async function GET() {
   try {

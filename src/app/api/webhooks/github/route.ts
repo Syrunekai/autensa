@@ -31,9 +31,9 @@ function verifyGitHubSignature(signature: string | null, rawBody: string): boole
   const secret = process.env.GITHUB_WEBHOOK_SECRET;
 
   if (!secret) {
-    // Dev mode — skip validation but log warning
-    console.warn('[GitHub Webhook] No GITHUB_WEBHOOK_SECRET set — skipping signature validation');
-    return true;
+    // Fail closed when the secret is unset
+    console.warn('[GitHub Webhook] No GITHUB_WEBHOOK_SECRET set — rejecting request (fail closed)');
+    return false;
   }
 
   if (!signature) return false;

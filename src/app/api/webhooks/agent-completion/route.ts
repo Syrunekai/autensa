@@ -12,8 +12,8 @@ function verifyWebhookSignature(signature: string, rawBody: string): boolean {
   const webhookSecret = process.env.WEBHOOK_SECRET;
   
   if (!webhookSecret) {
-    // Dev mode - skip validation
-    return true;
+    // Fail closed: without a secret no signature can be valid
+    return false;
   }
 
   if (!signature) {
@@ -48,18 +48,24 @@ export async function POST(request: NextRequest) {
     // Read raw body for signature verification
     const rawBody = await request.text();
     
-    // Verify webhook signature if WEBHOOK_SECRET is set
+    // Verify webhook signature — fail closed when WEBHOOK_SECRET is unset
     const webhookSecret = process.env.WEBHOOK_SECRET;
-    if (webhookSecret) {
-      const signature = request.headers.get('x-webhook-signature');
-      
-      if (!signature || !verifyWebhookSignature(signature, rawBody)) {
-        console.warn('[WEBHOOK] Invalid signature attempt');
-        return NextResponse.json(
-          { error: 'Unauthorized' },
-          { status: 401 }
-        );
-      }
+    if (!webhookSecret) {
+      console.warn('[WEBHOOK] WEBHOOK_SECRET unset — rejecting request (fail closed)');
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    const signature = request.headers.get('x-webhook-signature');
+
+    if (!signature || !verifyWebhookSignature(signature, rawBody)) {
+      console.warn('[WEBHOOK] Invalid signature attempt');
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
     }
 
     const body = JSON.parse(rawBody);

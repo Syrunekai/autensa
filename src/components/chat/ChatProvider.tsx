@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { usePathname } from 'next/navigation';
 import { ChatWidget } from './ChatWidget';
 import { CommandPalette, buildDefaultCommands, type PaletteCommand } from './CommandPalette';
 
@@ -12,6 +13,7 @@ import { CommandPalette, buildDefaultCommands, type PaletteCommand } from './Com
  * 4. Slash-command bridge from chat input → palette
  */
 export function ChatProvider({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteFilter, setPaletteFilter] = useState('');
   const [activeTaskId, setActiveTaskId] = useState<string | undefined>(undefined);
@@ -47,6 +49,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       window.dispatchEvent(new CustomEvent('chat:toggle'));
     },
   }), [activeTaskId]);
+
+  // No session on the login screen — skip the widgets so ChatWidget's 3 s
+  // unread poll doesn't emit a 401 every 3 s.
+  if (pathname === '/login') {
+    return <>{children}</>;
+  }
 
   return (
     <>

@@ -58,14 +58,17 @@ export async function POST(request: NextRequest) {
   const config = getJiraConfig();
   const body = await request.text();
 
-  // HMAC signature validation (if webhook secret is configured)
-  if (config.webhookSecret) {
-    const signature = request.headers.get('x-hub-signature') || '';
+  // HMAC signature validation — fail closed when the secret is unset
+  if (!config.webhookSecret) {
+    console.warn('[Jira Webhook] JIRA_WEBHOOK_SECRET unset — rejecting request (fail closed)');
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
-    if (!signature || !verifySignature(config.webhookSecret, signature, body)) {
-      console.warn('[Jira Webhook] Invalid signature');
-      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
-    }
+  const signature = request.headers.get('x-hub-signature') || '';
+
+  if (!signature || !verifySignature(config.webhookSecret, signature, body)) {
+    console.warn('[Jira Webhook] Invalid signature');
+    return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
   }
 
   let payload: Record<string, unknown>;
