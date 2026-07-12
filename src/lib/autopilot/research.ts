@@ -127,7 +127,6 @@ export async function runResearchCycle(productId: string, existingCycleId?: stri
 
         const { data: report, model: responseModel, usage } = await completeJSON(prompt, {
           systemPrompt: 'You are a product research agent. Analyze the product and respond with a JSON research report only.',
-          timeoutMs: 300_000,
         });
 
         allReports.push({ report, variantId: programEntry.variantId, variantName: programEntry.variantName });

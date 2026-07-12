@@ -171,7 +171,6 @@ export async function runIdeationCycle(productId: string, cycleId?: string, exis
 
         const { data: rawIdeas, model: responseModel, usage } = await completeJSON<unknown[]>(prompt, {
           systemPrompt: 'You are a product ideation agent. Respond with a JSON array of idea objects only.',
-          timeoutMs: 300_000,
         });
 
         // Normalize: handle { ideas: [...] } wrapper

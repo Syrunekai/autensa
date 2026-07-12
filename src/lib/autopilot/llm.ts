@@ -3,7 +3,8 @@
  * Uses /v1/chat/completions for stateless prompt→response (no agent sessions).
  */
 
-const DEFAULT_TIMEOUT_MS = 300_000; // 5 minutes
+const DEFAULT_TIMEOUT_SECONDS = 900; // 15 minutes
+const DEFAULT_MAX_OUTPUT_TOKENS = 32_768; // 32K
 const MAX_RETRIES = 3;
 const RETRY_BASE_DELAY_MS = 5_000; // 5s, 10s, 20s exponential backoff
 const OPENCLAW_GATEWAY_MODEL = process.env.OPENCLAW_GATEWAY_MODEL || 'openclaw/default';
@@ -26,6 +27,25 @@ function resolveGatewayModel(model: string): { gatewayModel: string; modelOverri
   }
 
   return { gatewayModel: OPENCLAW_GATEWAY_MODEL, modelOverride: model };
+}
+
+/**
+ * Max output (completion) tokens per call, from LLM_MAX_OUTPUT_TOKENS.
+ * 0 / unset / invalid falls back to DEFAULT_MAX_OUTPUT_TOKENS (never unlimited).
+ */
+function getConfiguredMaxTokens(): number {
+  const n = parseInt(process.env.LLM_MAX_OUTPUT_TOKENS ?? '', 10);
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_MAX_OUTPUT_TOKENS;
+}
+
+/**
+ * Max wall-clock time per call, from LLM_REQUEST_TIMEOUT_SECONDS (seconds).
+ * 0 / unset / invalid falls back to DEFAULT_TIMEOUT_SECONDS (never unlimited). Returns ms.
+ */
+function getConfiguredTimeoutMs(): number {
+  const s = parseInt(process.env.LLM_REQUEST_TIMEOUT_SECONDS ?? '', 10);
+  const seconds = Number.isFinite(s) && s > 0 ? s : DEFAULT_TIMEOUT_SECONDS;
+  return seconds * 1000;
 }
 
 export interface CompletionOptions {
@@ -55,8 +75,8 @@ export async function complete(prompt: string, options: CompletionOptions = {}):
     model = getDefaultModel(),
     systemPrompt,
     temperature = 0.7,
-    maxTokens = 8192,
-    timeoutMs = DEFAULT_TIMEOUT_MS,
+    maxTokens = getConfiguredMaxTokens(),
+    timeoutMs = getConfiguredTimeoutMs(),
   } = options;
   const { gatewayModel, modelOverride } = resolveGatewayModel(model);
 
