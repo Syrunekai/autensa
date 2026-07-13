@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { IdeaCard } from './IdeaCard';
+import { FetchError } from '@/components/FetchError';
 import type { Idea, MaybePoolEntry } from '@/lib/types';
 
 interface MaybePoolProps {
@@ -12,13 +13,21 @@ interface MaybePoolProps {
 export function MaybePool({ productId }: MaybePoolProps) {
   const [entries, setEntries] = useState<(MaybePoolEntry & { idea: Idea })[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<number | string | null>(null);
 
   const loadPool = async () => {
+    setLoading(true);
+    setLoadError(null);
     try {
       const res = await fetch(`/api/products/${productId}/maybe`);
-      if (res.ok) setEntries(await res.json());
+      if (res.ok) {
+        setEntries(await res.json());
+      } else {
+        setLoadError(res.status);
+      }
     } catch (error) {
       console.error('Failed to load maybe pool:', error);
+      setLoadError('network');
     } finally {
       setLoading(false);
     }
@@ -59,6 +68,8 @@ export function MaybePool({ productId }: MaybePoolProps) {
 
       {loading ? (
         <div className="text-mc-text-secondary animate-pulse">Loading...</div>
+      ) : loadError !== null ? (
+        <FetchError code={loadError} onRetry={loadPool} />
       ) : entries.length === 0 ? (
         <div className="text-center py-12 text-mc-text-secondary">No ideas in the maybe pool</div>
       ) : (

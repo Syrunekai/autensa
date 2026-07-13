@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Layers } from 'lucide-react';
 import { BatchReviewList } from '@/components/autopilot/BatchReviewList';
+import { FetchError } from '@/components/FetchError';
 import type { Idea } from '@/lib/types';
 
 export default function BatchReviewPage() {
@@ -12,23 +13,30 @@ export default function BatchReviewPage() {
   const router = useRouter();
   const [ideas, setIdeas] = useState<Idea[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<number | string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     async function loadIdeas() {
+      setLoading(true);
+      setLoadError(null);
       try {
         const res = await fetch(`/api/products/${productId}/ideas/pending?sort_by=impact_score&sort_dir=desc`);
         if (res.ok) {
           const data = await res.json();
           setIdeas(data);
+        } else {
+          setLoadError(res.status);
         }
       } catch (error) {
         console.error('Failed to load pending ideas:', error);
+        setLoadError('network');
       } finally {
         setLoading(false);
       }
     }
     loadIdeas();
-  }, [productId]);
+  }, [productId, reloadKey]);
 
   const handleBatchComplete = () => {
     // Navigate back to swipe deck or product page
@@ -55,6 +63,8 @@ export default function BatchReviewPage() {
           <div className="flex items-center justify-center py-20">
             <div className="text-mc-text-secondary animate-pulse">Loading ideas...</div>
           </div>
+        ) : loadError !== null ? (
+          <FetchError code={loadError} onRetry={() => setReloadKey(k => k + 1)} />
         ) : (
           <BatchReviewList
             productId={productId}

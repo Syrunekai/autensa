@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ListChecks, X } from 'lucide-react';
 import { IdeaCard } from './IdeaCard';
 import { UndoToast } from './UndoToast';
+import { FetchError } from '@/components/FetchError';
 import { useSwipe } from '@/hooks/useSwipe';
 import { useUiConfig } from '@/hooks/useUiConfig';
 import type { Idea, SwipeAction } from '@/lib/types';
@@ -37,6 +38,7 @@ export function SwipeDeck({ productId }: SwipeDeckProps) {
   const [lastSwipe, setLastSwipe] = useState<LastSwipe | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
   const [showDetail, setShowDetail] = useState(false);
+  const [loadError, setLoadError] = useState<number | string | null>(null);
   const { swipe_mode: mode, program_mode } = useUiConfig();
   const allowFire = program_mode !== 'IDEATION';
 
@@ -50,6 +52,8 @@ export function SwipeDeck({ productId }: SwipeDeckProps) {
   }, [mode]);
 
   const loadDeck = async () => {
+    setLoading(true);
+    setLoadError(null);
     try {
       const res = await fetch(`/api/products/${productId}/swipe/deck`);
       if (res.ok) {
@@ -57,9 +61,12 @@ export function SwipeDeck({ productId }: SwipeDeckProps) {
         setIdeas(data);
         setCurrentIndex(0);
         setPendingCount(data.length);
+      } else {
+        setLoadError(res.status);
       }
     } catch (error) {
       console.error('Failed to load swipe deck:', error);
+      setLoadError('network');
     } finally {
       setLoading(false);
     }
@@ -197,6 +204,10 @@ export function SwipeDeck({ productId }: SwipeDeckProps) {
         <div className="text-mc-text-secondary animate-pulse">Loading ideas...</div>
       </div>
     );
+  }
+
+  if (loadError !== null) {
+    return <FetchError code={loadError} onRetry={loadDeck} />;
   }
 
   if (!currentIdea || remaining <= 0) {

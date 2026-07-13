@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { IdeaCard } from './IdeaCard';
+import { FetchError } from '@/components/FetchError';
 import type { Idea } from '@/lib/types';
 
 interface IdeasListProps {
@@ -11,24 +12,33 @@ interface IdeasListProps {
 export function IdeasList({ productId }: IdeasListProps) {
   const [ideas, setIdeas] = useState<Idea[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<number | string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [statusFilter, setStatusFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
 
   useEffect(() => {
     (async () => {
+      setLoading(true);
+      setLoadError(null);
       try {
         const params = new URLSearchParams();
         if (statusFilter) params.set('status', statusFilter);
         if (categoryFilter) params.set('category', categoryFilter);
         const res = await fetch(`/api/products/${productId}/ideas?${params}`);
-        if (res.ok) setIdeas(await res.json());
+        if (res.ok) {
+          setIdeas(await res.json());
+        } else {
+          setLoadError(res.status);
+        }
       } catch (error) {
         console.error('Failed to load ideas:', error);
+        setLoadError('network');
       } finally {
         setLoading(false);
       }
     })();
-  }, [productId, statusFilter, categoryFilter]);
+  }, [productId, statusFilter, categoryFilter, reloadKey]);
 
   const statuses = ['', 'pending', 'approved', 'rejected', 'maybe', 'building', 'built', 'shipped'];
   const categories = ['', 'feature', 'improvement', 'ux', 'performance', 'integration', 'infrastructure', 'content', 'growth', 'monetization', 'operations', 'security'];
@@ -59,6 +69,8 @@ export function IdeasList({ productId }: IdeasListProps) {
 
       {loading ? (
         <div className="text-mc-text-secondary animate-pulse py-8 text-center">Loading ideas...</div>
+      ) : loadError !== null ? (
+        <FetchError code={loadError} onRetry={() => setReloadKey(k => k + 1)} />
       ) : ideas.length === 0 ? (
         <div className="text-center py-12 text-mc-text-secondary">No ideas found</div>
       ) : (
