@@ -7,7 +7,12 @@ export type SwipeDirection = 'left' | 'right' | 'up' | 'down' | null;
 interface UseSwipeOptions {
   threshold?: number;
   onSwipe?: (direction: SwipeDirection) => void;
+  /** 'all' tracks both axes; 'horizontal' tracks left/right only and ignores
+   * gestures that begin with predominantly vertical movement. */
+  axes?: 'all' | 'horizontal';
 }
+
+const AXIS_LOCK_SLOP_PX = 10;
 
 interface SwipeState {
   direction: SwipeDirection;
@@ -17,7 +22,7 @@ interface SwipeState {
 }
 
 export function useSwipe(options: UseSwipeOptions = {}) {
-  const { threshold = 80, onSwipe } = options;
+  const { threshold = 80, onSwipe, axes = 'all' } = options;
   const [state, setState] = useState<SwipeState>({
     direction: null,
     offsetX: 0,
@@ -25,10 +30,14 @@ export function useSwipe(options: UseSwipeOptions = {}) {
     isSwiping: false,
   });
   const startRef = useRef<{ x: number; y: number } | null>(null);
+  // Axis lock, set by the first movement beyond the slop distance:
+  // 'swipe' tracks the gesture, 'scroll' hands the gesture to the browser.
+  const lockRef = useRef<'swipe' | 'scroll' | null>(null);
   const elementRef = useRef<HTMLDivElement>(null);
 
   const handleStart = useCallback((clientX: number, clientY: number) => {
     startRef.current = { x: clientX, y: clientY };
+    lockRef.current = null;
     setState(s => ({ ...s, isSwiping: true }));
   }, []);
 
@@ -36,6 +45,16 @@ export function useSwipe(options: UseSwipeOptions = {}) {
     if (!startRef.current) return;
     const dx = clientX - startRef.current.x;
     const dy = clientY - startRef.current.y;
+
+    if (axes === 'horizontal') {
+      if (lockRef.current === null && (Math.abs(dx) > AXIS_LOCK_SLOP_PX || Math.abs(dy) > AXIS_LOCK_SLOP_PX)) {
+        lockRef.current = Math.abs(dx) > Math.abs(dy) ? 'swipe' : 'scroll';
+      }
+      if (lockRef.current !== 'swipe') return;
+      const direction: SwipeDirection = dx > threshold ? 'right' : dx < -threshold ? 'left' : null;
+      setState({ direction, offsetX: dx, offsetY: 0, isSwiping: true });
+      return;
+    }
 
     let direction: SwipeDirection = null;
     if (Math.abs(dx) > Math.abs(dy)) {
@@ -45,13 +64,14 @@ export function useSwipe(options: UseSwipeOptions = {}) {
     }
 
     setState({ direction, offsetX: dx, offsetY: dy, isSwiping: true });
-  }, [threshold]);
+  }, [threshold, axes]);
 
   const handleEnd = useCallback(() => {
     if (state.direction && onSwipe) {
       onSwipe(state.direction);
     }
     startRef.current = null;
+    lockRef.current = null;
     setState({ direction: null, offsetX: 0, offsetY: 0, isSwiping: false });
   }, [state.direction, onSwipe]);
 

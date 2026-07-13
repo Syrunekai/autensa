@@ -3,6 +3,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { ArrowUpDown, CheckSquare, Square, Loader, Send } from 'lucide-react';
 import { BatchReviewRow } from './BatchReviewRow';
+import { useUiConfig } from '@/hooks/useUiConfig';
 import type { Idea, SwipeAction } from '@/lib/types';
 
 interface BatchReviewListProps {
@@ -49,6 +50,7 @@ function sortIdeas(ideas: Idea[], field: SortField, dir: SortDir): Idea[] {
 }
 
 export function BatchReviewList({ productId, ideas: initialIdeas, onBatchComplete }: BatchReviewListProps) {
+  const { program_mode } = useUiConfig();
   const [ideas, setIdeas] = useState<Idea[]>(initialIdeas);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [actions, setActions] = useState<Record<string, SwipeAction>>({});
@@ -240,12 +242,14 @@ export function BatchReviewList({ productId, ideas: initialIdeas, onBatchComplet
           >
             🤔 Maybe All
           </button>
-          <button
-            onClick={() => applyBulkAction('fire')}
-            className="text-[11px] px-2 py-1 rounded bg-orange-500/20 text-orange-400 hover:bg-orange-500/30 transition-colors"
-          >
-            🔥 Fire All
-          </button>
+          {program_mode !== 'IDEATION' && (
+            <button
+              onClick={() => applyBulkAction('fire')}
+              className="text-[11px] px-2 py-1 rounded bg-orange-500/20 text-orange-400 hover:bg-orange-500/30 transition-colors"
+            >
+              🔥 Fire All
+            </button>
+          )}
         </div>
       )}
 

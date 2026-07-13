@@ -2,11 +2,19 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { ListChecks } from 'lucide-react';
+import { ListChecks, X } from 'lucide-react';
 import { IdeaCard } from './IdeaCard';
 import { UndoToast } from './UndoToast';
 import { useSwipe } from '@/hooks/useSwipe';
+import { useUiConfig } from '@/hooks/useUiConfig';
 import type { Idea, SwipeAction } from '@/lib/types';
+
+/**
+ * Deck interaction modes (SWIPE_MODE via /api/ui-config):
+ * - FULL:   four-direction swipe decides; tap opens a scrollable detail view
+ * - HYBRID: left/right swipe decides; card scrolls; action bar for all actions
+ * - BAR:    left/right swipe navigates between cards; action bar decides
+ */
 
 interface SwipeDeckProps {
   productId: string;
@@ -28,6 +36,18 @@ export function SwipeDeck({ productId }: SwipeDeckProps) {
   const [sessionStats, setSessionStats] = useState({ approved: 0, rejected: 0, maybe: 0, fired: 0 });
   const [lastSwipe, setLastSwipe] = useState<LastSwipe | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
+  const [showDetail, setShowDetail] = useState(false);
+  const { swipe_mode: mode, program_mode } = useUiConfig();
+  const allowFire = program_mode !== 'IDEATION';
+
+  // Offsets the chat widget button above the fixed action bar on small screens.
+  useEffect(() => {
+    if (mode === 'FULL') return;
+    document.documentElement.style.setProperty('--chat-fab-offset', '76px');
+    return () => {
+      document.documentElement.style.removeProperty('--chat-fab-offset');
+    };
+  }, [mode]);
 
   const loadDeck = async () => {
     try {
@@ -95,9 +115,15 @@ export function SwipeDeck({ productId }: SwipeDeckProps) {
 
     setTimeout(() => {
       setAnimatingOut(null);
-      setCurrentIndex(prev => prev + 1);
+      if (mode === 'BAR') {
+        // BAR keeps the browsing position: remove the decided card and stay put.
+        setIdeas(prev => prev.filter((_, i) => i !== currentIndex));
+        setCurrentIndex(prev => Math.max(0, Math.min(prev, ideas.length - 2)));
+      } else {
+        setCurrentIndex(prev => prev + 1);
+      }
     }, 300);
-  }, [ideas, currentIndex, productId]);
+  }, [ideas, currentIndex, productId, mode]);
 
   const handleUndo = useCallback((restoredIdea: unknown) => {
     if (!lastSwipe) return;
@@ -105,16 +131,16 @@ export function SwipeDeck({ productId }: SwipeDeckProps) {
     const idea = restoredIdea as Idea;
     const action = lastSwipe.action;
 
-    // Insert the idea back at the current position (before the current card)
+    // Insert the idea back at the position it was decided from.
+    const restoreAt = mode === 'BAR' ? Math.min(lastSwipe.index, ideas.length) : currentIndex;
     setIdeas(prev => {
       const newIdeas = [...prev];
-      // Insert before current index
-      newIdeas.splice(currentIndex, 0, idea);
+      newIdeas.splice(restoreAt, 0, idea);
       return newIdeas;
     });
 
-    // Move index back to show the restored card
-    setCurrentIndex(prev => prev);
+    // Show the restored card.
+    setCurrentIndex(mode === 'BAR' ? restoreAt : currentIndex);
 
     // Decrement the session stats
     setSessionStats(prev => ({
@@ -124,7 +150,7 @@ export function SwipeDeck({ productId }: SwipeDeckProps) {
     }));
 
     setLastSwipe(null);
-  }, [lastSwipe, currentIndex]);
+  }, [lastSwipe, currentIndex, mode, ideas.length]);
 
   const handleUndoExpire = useCallback(() => {
     setLastSwipe(null);
@@ -141,14 +167,25 @@ export function SwipeDeck({ productId }: SwipeDeckProps) {
   }, []);
 
   const { offsetX, offsetY, direction, handlers } = useSwipe({
+    axes: mode === 'FULL' ? 'all' : 'horizontal',
     onSwipe: (dir) => {
+      if (mode === 'BAR') {
+        // Swipes navigate: left advances, right goes back.
+        if (dir === 'left') setCurrentIndex(i => Math.min(i + 1, ideas.length - 1));
+        if (dir === 'right') setCurrentIndex(i => Math.max(i - 1, 0));
+        return;
+      }
       const action = swipeDirectionToAction(dir);
-      if (action) handleSwipe(action);
+      if (!action) return;
+      if (mode === 'HYBRID' && (action === 'fire' || action === 'maybe')) return;
+      if (action === 'fire' && !allowFire) return;
+      handleSwipe(action);
     },
   });
 
-  const currentIdea = ideas[currentIndex];
-  const remaining = ideas.length - currentIndex;
+  const safeIndex = mode === 'BAR' ? Math.max(0, Math.min(currentIndex, ideas.length - 1)) : currentIndex;
+  const currentIdea = ideas[safeIndex];
+  const remaining = mode === 'BAR' ? ideas.length : ideas.length - currentIndex;
 
   // Batch review threshold — default 10
   const BATCH_THRESHOLD = 10;
@@ -221,11 +258,11 @@ export function SwipeDeck({ productId }: SwipeDeckProps) {
   };
 
   return (
-    <div className="flex flex-col items-center space-y-6">
+    <div className={`flex flex-col items-center space-y-6 ${mode !== 'FULL' ? 'pb-24 lg:pb-0' : ''}`}>
       {/* Progress + Review All */}
       <div className="flex items-center gap-4">
         <div className="text-sm text-mc-text-secondary">
-          {currentIndex + 1} / {ideas.length} ideas
+          {safeIndex + 1} / {ideas.length} ideas
         </div>
         {showReviewAll && (
           <Link
@@ -240,7 +277,7 @@ export function SwipeDeck({ productId }: SwipeDeckProps) {
 
       {/* Card stack */}
       <div
-        className="relative select-none touch-none"
+        className={`relative select-none ${mode === 'FULL' ? 'touch-none' : '[touch-action:pan-y]'}`}
         style={{ perspective: '1000px' }}
         {...handlers}
       >
@@ -260,23 +297,83 @@ export function SwipeDeck({ productId }: SwipeDeckProps) {
             backgroundColor: getOverlayColor(),
             borderRadius: '0.75rem',
           }}
+          onClick={(e) => {
+            if (mode !== 'FULL') return;
+            if ((e.target as HTMLElement).closest('button')) return;
+            setShowDetail(true);
+          }}
         >
-          <IdeaCard
-            idea={currentIdea}
-            onAction={(action, notes) => handleSwipe(action, notes)}
-          />
+          <div className={mode === 'FULL'
+            ? 'relative max-h-[62vh] overflow-hidden rounded-xl'
+            : 'max-h-[62vh] overflow-y-auto overscroll-contain rounded-xl'}
+          >
+            <IdeaCard
+              idea={currentIdea}
+              onAction={(action, notes) => handleSwipe(action, notes)}
+              showActions={mode === 'FULL'}
+              showFire={allowFire}
+            />
+            {mode === 'FULL' && (
+              <div className="absolute bottom-0 inset-x-0 h-14 bg-gradient-to-t from-mc-bg-secondary to-transparent flex items-end justify-center pb-1.5 pointer-events-none rounded-b-xl">
+                <span className="text-[10px] text-mc-text-secondary uppercase tracking-wider">Tap card to expand</span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Direction label */}
         {direction && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 text-lg font-bold pointer-events-none z-10">
-            {direction === 'right' && <span className="text-green-400">YES</span>}
-            {direction === 'left' && <span className="text-red-400">PASS</span>}
-            {direction === 'up' && <span className="text-orange-400">BUILD NOW!</span>}
-            {direction === 'down' && <span className="text-amber-400">MAYBE</span>}
+            {mode === 'BAR' ? (
+              <>
+                {direction === 'left' && <span className="text-mc-text">NEXT &rarr;</span>}
+                {direction === 'right' && <span className="text-mc-text">&larr; PREV</span>}
+              </>
+            ) : (
+              <>
+                {direction === 'right' && <span className="text-green-400">YES</span>}
+                {direction === 'left' && <span className="text-red-400">PASS</span>}
+                {direction === 'up' && allowFire && <span className="text-orange-400">BUILD NOW!</span>}
+                {direction === 'down' && <span className="text-amber-400">MAYBE</span>}
+              </>
+            )}
           </div>
         )}
       </div>
+
+      {/* Action bar (HYBRID and BAR) — fixed on mobile, inline on desktop */}
+      {mode !== 'FULL' && currentIdea && (
+        <div className="fixed bottom-0 inset-x-0 z-40 bg-mc-bg-secondary/95 border-t border-mc-border p-3 lg:static lg:z-auto lg:bg-transparent lg:border-0 lg:p-0">
+          <div className={`grid gap-2 max-w-md mx-auto ${allowFire ? 'grid-cols-4' : 'grid-cols-3'}`}>
+            <button
+              onClick={() => handleSwipe('reject')}
+              className="min-h-11 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 text-sm font-medium transition-colors"
+            >
+              Pass
+            </button>
+            <button
+              onClick={() => handleSwipe('maybe')}
+              className="min-h-11 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-sm font-medium transition-colors"
+            >
+              Maybe
+            </button>
+            {allowFire && (
+              <button
+                onClick={() => handleSwipe('fire')}
+                className="min-h-11 rounded-lg bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 text-sm font-medium transition-colors"
+              >
+                Now
+              </button>
+            )}
+            <button
+              onClick={() => handleSwipe('approve')}
+              className="min-h-11 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400 text-sm font-medium transition-colors"
+            >
+              Yes
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Session stats */}
       <div className="flex gap-4 text-xs text-mc-text-secondary">
@@ -289,8 +386,34 @@ export function SwipeDeck({ productId }: SwipeDeckProps) {
 
       {/* Keyboard hint */}
       <div className="text-xs text-mc-text-secondary/50">
-        &larr; Pass &middot; &darr; Maybe &middot; &rarr; Yes &middot; &uarr; Build Now
+        {mode === 'FULL' && <>&larr; Pass &middot; &darr; Maybe &middot; &rarr; Yes {allowFire && <>&middot; &uarr; Build Now </>}&middot; Tap to expand</>}
+        {mode === 'HYBRID' && <>&larr; Pass &middot; &rarr; Yes &middot; buttons for {allowFire ? 'Maybe / Now' : 'Maybe'}</>}
+        {mode === 'BAR' && <>&larr; Next &middot; &rarr; Previous &middot; decide with buttons</>}
       </div>
+
+      {/* Detail view (FULL) — scrollable, actions available */}
+      {showDetail && currentIdea && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3">
+          <div className="absolute inset-0 bg-black/70" onClick={() => setShowDetail(false)} />
+          <button
+            onClick={() => setShowDetail(false)}
+            className="absolute top-3 right-3 z-20 p-2 rounded-full bg-mc-bg-secondary border border-mc-border text-mc-text-secondary hover:text-mc-text"
+            aria-label="Close detail view"
+          >
+            <X className="w-4 h-4" />
+          </button>
+          <div className="relative z-10 w-full max-w-md max-h-[88vh] overflow-y-auto overscroll-contain rounded-xl">
+            <IdeaCard
+              idea={currentIdea}
+              onAction={(action, notes) => {
+                setShowDetail(false);
+                handleSwipe(action, notes);
+              }}
+              showFire={allowFire}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Undo toast — fixed at bottom */}
       {lastSwipe && (

@@ -1,6 +1,7 @@
 'use client';
 
 import { Target, Code2, Tag } from 'lucide-react';
+import { useUiConfig } from '@/hooks/useUiConfig';
 import type { Idea, SwipeAction } from '@/lib/types';
 
 interface BatchReviewRowProps {
@@ -34,6 +35,7 @@ const complexityColors: Record<string, string> = {
 
 export function BatchReviewRow({ idea, selected, action, onToggleSelect, onActionChange }: BatchReviewRowProps) {
   const tags: string[] = idea.tags ? (() => { try { return JSON.parse(idea.tags!); } catch { return []; } })() : [];
+  const { program_mode } = useUiConfig();
 
   return (
     <div className={`flex items-start gap-3 p-4 border-b border-mc-border transition-colors ${
@@ -126,7 +128,7 @@ export function BatchReviewRow({ idea, selected, action, onToggleSelect, onActio
           <option value="approve">✅ Approve</option>
           <option value="reject">❌ Reject</option>
           <option value="maybe">🤔 Maybe</option>
-          <option value="fire">🔥 Build Now</option>
+          {program_mode !== 'IDEATION' && <option value="fire">🔥 Build Now</option>}
         </select>
       </div>
     </div>

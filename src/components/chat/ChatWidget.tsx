@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { MessageSquare, X, Minimize2, Maximize2, ChevronLeft, Inbox } from 'lucide-react';
 import { ChatConversation } from './ChatConversation';
 import { ChatInbox } from './ChatInbox';
+import { useUiConfig } from '@/hooks/useUiConfig';
 
 export interface UnreadTask {
   task_id: string;
@@ -18,6 +19,7 @@ export interface UnreadTask {
 }
 
 export function ChatWidget() {
+  const { program_mode } = useUiConfig();
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -95,13 +97,16 @@ export function ChatWidget() {
   const widthClass = isExpanded ? 'w-[560px]' : 'w-[380px]';
   const heightClass = isExpanded ? 'h-[600px]' : 'h-[480px]';
 
+  // Task chat targets build agents; ideation-only installs have none.
+  if (program_mode === 'IDEATION') return null;
+
   return (
     <>
       {/* Floating Chat Bubble */}
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-5 right-5 z-[45] w-14 h-14 bg-mc-accent rounded-full shadow-lg shadow-mc-accent/20 flex items-center justify-center hover:bg-mc-accent/90 transition-all hover:scale-105 group"
+          className="fixed bottom-[calc(1.25rem+var(--chat-fab-offset,0px))] lg:bottom-5 right-5 z-[45] w-14 h-14 bg-mc-accent rounded-full shadow-lg shadow-mc-accent/20 flex items-center justify-center hover:bg-mc-accent/90 transition-all hover:scale-105 group"
           title="Open Chat (⌘⇧C)"
         >
           <MessageSquare className="w-6 h-6 text-mc-bg" />
@@ -116,7 +121,7 @@ export function ChatWidget() {
       {/* Chat Panel */}
       {isOpen && (
         <div
-          className={`fixed bottom-5 right-5 z-[45] ${widthClass} ${heightClass} max-h-[85vh] max-w-[95vw] bg-mc-bg-secondary border border-mc-border rounded-xl shadow-2xl shadow-black/40 flex flex-col overflow-hidden transition-all duration-200`}
+          className={`fixed bottom-[calc(1.25rem+var(--chat-fab-offset,0px))] lg:bottom-5 right-5 z-[45] ${widthClass} ${heightClass} max-h-[85vh] max-w-[95vw] bg-mc-bg-secondary border border-mc-border rounded-xl shadow-2xl shadow-black/40 flex flex-col overflow-hidden transition-all duration-200`}
         >
           {/* Header */}
           <div className="flex items-center justify-between px-3 py-2.5 border-b border-mc-border bg-mc-bg-secondary flex-shrink-0">

@@ -8,6 +8,8 @@ interface IdeaCardProps {
   idea: Idea;
   onAction?: (action: 'approve' | 'reject' | 'maybe' | 'fire', notes?: string) => void;
   showActions?: boolean;
+  /** Whether the "Now!" (fire) action is offered. */
+  showFire?: boolean;
   compact?: boolean;
 }
 
@@ -32,7 +34,7 @@ const complexityColors: Record<string, string> = {
   XL: 'text-red-400',
 };
 
-export function IdeaCard({ idea, onAction, showActions = true, compact = false }: IdeaCardProps) {
+export function IdeaCard({ idea, onAction, showActions = true, showFire = true, compact = false }: IdeaCardProps) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const toggle = (section: string) => {
@@ -179,7 +181,7 @@ export function IdeaCard({ idea, onAction, showActions = true, compact = false }
 
       {/* Action buttons */}
       {showActions && onAction && (
-        <div className="grid grid-cols-4 gap-2 pt-2">
+        <div className={`grid gap-2 pt-2 ${showFire ? 'grid-cols-4' : 'grid-cols-3'}`}>
           <button
             onClick={() => onAction('reject')}
             className="min-h-11 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 text-sm font-medium transition-colors"
@@ -192,17 +194,19 @@ export function IdeaCard({ idea, onAction, showActions = true, compact = false }
           >
             Maybe
           </button>
+          {showFire && (
+            <button
+              onClick={() => onAction('fire')}
+              className="min-h-11 rounded-lg bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 text-sm font-medium transition-colors"
+            >
+              Now!
+            </button>
+          )}
           <button
             onClick={() => onAction('approve')}
             className="min-h-11 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400 text-sm font-medium transition-colors"
           >
             Yes
-          </button>
-          <button
-            onClick={() => onAction('fire')}
-            className="min-h-11 rounded-lg bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 text-sm font-medium transition-colors"
-          >
-            Now!
           </button>
         </div>
       )}
