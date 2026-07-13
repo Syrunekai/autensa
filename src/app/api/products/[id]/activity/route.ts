@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { queryAll } from '@/lib/db';
+import { getCycleNumberMap } from '@/lib/autopilot/activity';
 import type { AutopilotActivityEntry } from '@/lib/types';
 
 export async function GET(
@@ -24,6 +25,15 @@ export async function GET(
   sqlParams.push(limit);
 
   const entries = queryAll<AutopilotActivityEntry>(sql, sqlParams);
+
+  // Annotate entries with each cycle's per-type chronological ordinal.
+  const numberMaps = {
+    research: getCycleNumberMap(productId, 'research'),
+    ideation: getCycleNumberMap(productId, 'ideation'),
+  };
+  for (const entry of entries) {
+    entry.cycle_number = numberMaps[entry.cycle_type]?.get(entry.cycle_id);
+  }
 
   return NextResponse.json({ entries });
 }

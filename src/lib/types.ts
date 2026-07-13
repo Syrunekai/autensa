@@ -650,6 +650,8 @@ export interface AutopilotActivityEntry {
   product_id: string;
   cycle_id: string;
   cycle_type: 'research' | 'ideation';
+  /** 1-based chronological ordinal of the cycle within its type. Computed at read time. */
+  cycle_number?: number;
   event_type: string;
   message: string;
   detail?: string;

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Activity, ChevronRight, ChevronLeft, Zap, Clock, CheckCircle, AlertCircle, Loader, X } from 'lucide-react';
+import { Activity, ChevronRight, ChevronLeft, ChevronDown, Zap, Clock, CheckCircle, AlertCircle, Loader, X } from 'lucide-react';
 import type { AutopilotActivityEntry } from '@/lib/types';
 
 interface ActivityPanelProps {
@@ -48,10 +48,16 @@ function groupByCycle(entries: AutopilotActivityEntry[]): Map<string, AutopilotA
   return groups;
 }
 
-function cycleLabel(cycleType: string, index: number): string {
+function cycleLabel(cycleType: string, cycleNumber?: number): string {
   const type = cycleType === 'research' ? 'Research' : 'Ideation';
-  return `${type} Cycle #${index}`;
+  // cycle_number is the per-type chronological ordinal provided by the API.
+  return cycleNumber !== undefined ? `${type} Cycle #${cycleNumber}` : `${type} Cycle`;
 }
+
+const PANEL_MIN_WIDTH = 240;
+const PANEL_MAX_WIDTH = 640;
+const PANEL_DEFAULT_WIDTH = 320;
+const PANEL_WIDTH_KEY = 'autopilot-activity-width';
 
 export function ActivityPanel({ productId }: ActivityPanelProps) {
   const [entries, setEntries] = useState<AutopilotActivityEntry[]>([]);
@@ -59,7 +65,16 @@ export function ActivityPanel({ productId }: ActivityPanelProps) {
     if (typeof window === 'undefined') return true;
     return localStorage.getItem(`autopilot-activity-open-${productId}`) !== 'false';
   });
-  const bottomRef = useRef<HTMLDivElement>(null);
+  // Desktop panel width, resizable via drag handle; persisted in localStorage.
+  const [width, setWidth] = useState(() => {
+    if (typeof window === 'undefined') return PANEL_DEFAULT_WIDTH;
+    const w = parseInt(localStorage.getItem(PANEL_WIDTH_KEY) || '', 10);
+    return Number.isFinite(w) ? Math.min(PANEL_MAX_WIDTH, Math.max(PANEL_MIN_WIDTH, w)) : PANEL_DEFAULT_WIDTH;
+  });
+  // Per-group collapse overrides; keys absent from the map use the default
+  // (only the newest group of each type is expanded).
+  const [collapsedOverrides, setCollapsedOverrides] = useState<Record<string, boolean>>({});
+  const scrollRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const initialLoadDone = useRef(false);
 
@@ -67,6 +82,26 @@ export function ActivityPanel({ productId }: ActivityPanelProps) {
   useEffect(() => {
     localStorage.setItem(`autopilot-activity-open-${productId}`, String(isOpen));
   }, [isOpen, productId]);
+
+  // Persist panel width
+  useEffect(() => {
+    localStorage.setItem(PANEL_WIDTH_KEY, String(width));
+  }, [width]);
+
+  // Drag-to-resize: width tracks the distance from the cursor to the right
+  // viewport edge, clamped to the min/max bounds.
+  const startDrag = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const onMove = (ev: MouseEvent) => {
+      setWidth(Math.min(PANEL_MAX_WIDTH, Math.max(PANEL_MIN_WIDTH, window.innerWidth - ev.clientX)));
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, []);
 
   // Fetch initial entries (no auto-scroll on mount)
   useEffect(() => {
@@ -103,15 +138,25 @@ export function ActivityPanel({ productId }: ActivityPanelProps) {
     };
   }, [handleSSEMessage]);
 
-  // Auto-scroll to bottom only for new live entries (not initial load)
+  // Scroll to the top when live entries arrive (groups render newest-first).
+  // Skipped on initial load to preserve the current scroll position.
   useEffect(() => {
     if (initialLoadDone.current) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }, [entries]);
 
   const grouped = groupByCycle(entries);
-  const cycleKeys = Array.from(grouped.keys());
+  // Groups are ordered newest-first; entries within a group remain chronological.
+  const displayKeys = Array.from(grouped.keys()).reverse();
+  // The newest group of each type is expanded by default.
+  const newestOfType: Record<string, string> = {};
+  for (const key of displayKeys) {
+    const t = key.split('-')[0];
+    if (!(t in newestOfType)) newestOfType[t] = key;
+  }
+  const isCollapsed = (key: string, cycleType: string) =>
+    collapsedOverrides[key] ?? (newestOfType[cycleType] !== key);
 
   // Mobile drawer state
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -140,20 +185,31 @@ export function ActivityPanel({ productId }: ActivityPanelProps) {
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 py-2 space-y-3">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-3">
         {entries.length === 0 && (
           <p className="text-xs text-mc-text-secondary text-center py-4">No activity yet</p>
         )}
 
-        {cycleKeys.map((key, idx) => {
+        {displayKeys.map((key) => {
           const group = grouped.get(key)!;
           const cycleType = key.split('-')[0];
+          const cycleNumber = group.find(e => e.cycle_number !== undefined)?.cycle_number;
+          const collapsed = isCollapsed(key, cycleType);
 
           return (
             <div key={key}>
-              <div className="text-[10px] font-semibold text-mc-text-secondary uppercase tracking-wider mb-1">
-                {cycleLabel(cycleType, cycleKeys.length - idx)}
-              </div>
+              <button
+                type="button"
+                onClick={() => setCollapsedOverrides(prev => ({ ...prev, [key]: !collapsed }))}
+                className="w-full flex items-center gap-1 text-[10px] font-semibold text-mc-text-secondary uppercase tracking-wider mb-1 hover:text-mc-text"
+              >
+                {collapsed
+                  ? <ChevronRight className="w-3 h-3 shrink-0" />
+                  : <ChevronDown className="w-3 h-3 shrink-0" />}
+                <span>{cycleLabel(cycleType, cycleNumber)}</span>
+                <span className="normal-case font-normal">({group.length})</span>
+              </button>
+              {!collapsed && (
               <div className="space-y-1">
                 {group.map(entry => (
                   <div key={entry.id} className="flex items-start gap-2 text-xs group">
@@ -173,19 +229,27 @@ export function ActivityPanel({ productId }: ActivityPanelProps) {
                   </div>
                 ))}
               </div>
+              )}
             </div>
           );
         })}
-        <div ref={bottomRef} />
       </div>
     </div>
   );
 
   return (
     <>
-      {/* Desktop: side panel */}
+      {/* Desktop: side panel (drag left edge to resize; width persisted) */}
       {isOpen ? (
-        <div className="hidden lg:flex w-80 border-l border-mc-border bg-mc-bg-secondary flex-col">
+        <div
+          className="hidden lg:flex relative border-l border-mc-border bg-mc-bg-secondary flex-col"
+          style={{ width }}
+        >
+          <div
+            onMouseDown={startDrag}
+            className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-mc-accent/40 z-10"
+            title="Drag to resize"
+          />
           {panelContent}
         </div>
       ) : (

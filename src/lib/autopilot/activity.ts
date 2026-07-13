@@ -1,6 +1,24 @@
 import { v4 as uuidv4 } from 'uuid';
-import { run } from '@/lib/db';
+import { run, queryAll } from '@/lib/db';
 import { broadcast } from '@/lib/events';
+
+/**
+ * Maps cycle_id to its 1-based ordinal within a product's cycles of the given
+ * type, ordered by started_at. Research and ideation cycles are numbered
+ * independently. Ordinals are computed at read time, not stored.
+ */
+export function getCycleNumberMap(
+  productId: string,
+  cycleType: 'research' | 'ideation'
+): Map<string, number> {
+  const table = cycleType === 'research' ? 'research_cycles' : 'ideation_cycles';
+  const rows = queryAll<{ id: string; n: number }>(
+    `SELECT id, ROW_NUMBER() OVER (ORDER BY started_at ASC, id ASC) AS n
+     FROM ${table} WHERE product_id = ?`,
+    [productId]
+  );
+  return new Map(rows.map(r => [r.id, r.n]));
+}
 
 /**
  * Emit an autopilot activity event — persists to DB and broadcasts via SSE.
@@ -28,6 +46,9 @@ export function emitAutopilotActivity(input: {
     ]
   );
 
+  // cycle_number matches the ordinal returned by the activity API.
+  const cycleNumber = getCycleNumberMap(input.productId, input.cycleType).get(input.cycleId);
+
   broadcast({
     type: 'autopilot_activity',
     payload: {
@@ -35,6 +56,7 @@ export function emitAutopilotActivity(input: {
       product_id: input.productId,
       cycle_id: input.cycleId,
       cycle_type: input.cycleType,
+      cycle_number: cycleNumber,
       event_type: input.eventType,
       message: input.message,
       detail: input.detail,
