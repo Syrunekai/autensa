@@ -76,6 +76,37 @@ export function SwipeDeck({ productId }: SwipeDeckProps) {
     loadDeck();
   }, [productId]);
 
+  // Hydrate the decision counters from swipe history so they survive page
+  // reloads. Counters are all-time per product, not per browser session.
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`/api/products/${productId}/swipe/stats`);
+        if (!res.ok) return;
+        const stats = await res.json();
+        setSessionStats({
+          approved: stats.approved || 0,
+          rejected: stats.rejected || 0,
+          maybe: stats.maybe || 0,
+          fired: stats.fired || 0,
+        });
+      } catch (error) {
+        console.error('Failed to load swipe stats:', error);
+      }
+    })();
+  }, [productId]);
+
+  // Optional decision note for the action bar (BAR/HYBRID). Cleared when the
+  // current card changes so a note is only ever submitted with the card it
+  // was written for. The field renders one line tall and expands to two
+  // while focused or holding text.
+  const [barNotes, setBarNotes] = useState('');
+  const [barNotesFocused, setBarNotesFocused] = useState(false);
+
+  useEffect(() => {
+    setBarNotes('');
+  }, [currentIndex]);
+
   const handleSwipe = useCallback(async (action: SwipeAction, notes?: string) => {
     const idea = ideas[currentIndex];
     if (!idea) return;
@@ -119,6 +150,8 @@ export function SwipeDeck({ productId }: SwipeDeckProps) {
     } catch (error) {
       console.error('Failed to record swipe:', error);
     }
+
+    setBarNotes('');
 
     setTimeout(() => {
       setAnimatingOut(null);
@@ -175,6 +208,9 @@ export function SwipeDeck({ productId }: SwipeDeckProps) {
 
   const { offsetX, offsetY, direction, handlers } = useSwipe({
     axes: mode === 'FULL' ? 'all' : 'horizontal',
+    // BAR swipes only navigate, so they trigger at 60% of the distance
+    // required for decision gestures.
+    threshold: mode === 'BAR' ? 48 : 80,
     onSwipe: (dir) => {
       if (mode === 'BAR') {
         // Swipes navigate: left advances, right goes back.
@@ -355,29 +391,41 @@ export function SwipeDeck({ productId }: SwipeDeckProps) {
       {/* Action bar (HYBRID and BAR) — fixed on mobile, inline on desktop */}
       {mode !== 'FULL' && currentIdea && (
         <div className="fixed bottom-0 inset-x-0 z-40 bg-mc-bg-secondary/95 border-t border-mc-border p-3 lg:static lg:z-auto lg:bg-transparent lg:border-0 lg:p-0">
+          <div className="max-w-md mx-auto mb-2">
+            <textarea
+              value={barNotes}
+              onChange={(e) => setBarNotes(e.target.value)}
+              onFocus={() => setBarNotesFocused(true)}
+              onBlur={() => setBarNotesFocused(false)}
+              maxLength={2000}
+              rows={barNotesFocused || barNotes.trim() ? 2 : 1}
+              placeholder="Optional note — why this decision? Feeds future idea generation."
+              className="w-full text-sm rounded-lg bg-mc-bg-tertiary border border-mc-border text-mc-text placeholder:text-mc-text-secondary p-2 resize-none focus:outline-none focus:border-mc-accent"
+            />
+          </div>
           <div className={`grid gap-2 max-w-md mx-auto ${allowFire ? 'grid-cols-4' : 'grid-cols-3'}`}>
             <button
-              onClick={() => handleSwipe('reject')}
+              onClick={() => handleSwipe('reject', barNotes.trim() || undefined)}
               className="min-h-11 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 text-sm font-medium transition-colors"
             >
               Pass
             </button>
             <button
-              onClick={() => handleSwipe('maybe')}
+              onClick={() => handleSwipe('maybe', barNotes.trim() || undefined)}
               className="min-h-11 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-sm font-medium transition-colors"
             >
               Maybe
             </button>
             {allowFire && (
               <button
-                onClick={() => handleSwipe('fire')}
+                onClick={() => handleSwipe('fire', barNotes.trim() || undefined)}
                 className="min-h-11 rounded-lg bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 text-sm font-medium transition-colors"
               >
                 Now
               </button>
             )}
             <button
-              onClick={() => handleSwipe('approve')}
+              onClick={() => handleSwipe('approve', barNotes.trim() || undefined)}
               className="min-h-11 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400 text-sm font-medium transition-colors"
             >
               Yes
@@ -386,7 +434,7 @@ export function SwipeDeck({ productId }: SwipeDeckProps) {
         </div>
       )}
 
-      {/* Session stats */}
+      {/* Decision counters — all-time per product, hydrated from swipe history */}
       <div className="flex gap-4 text-xs text-mc-text-secondary">
         <span>Remaining: {remaining}</span>
         <span className="text-green-400">{sessionStats.approved} yes</span>
@@ -421,6 +469,7 @@ export function SwipeDeck({ productId }: SwipeDeckProps) {
                 handleSwipe(action, notes);
               }}
               showFire={allowFire}
+              showNotesInput
             />
           </div>
         </div>

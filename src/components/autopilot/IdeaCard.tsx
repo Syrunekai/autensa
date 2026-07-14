@@ -11,6 +11,8 @@ interface IdeaCardProps {
   /** Whether the "Now!" (fire) action is offered. */
   showFire?: boolean;
   compact?: boolean;
+  /** Show an optional note field whose text is submitted with the chosen action. */
+  showNotesInput?: boolean;
 }
 
 const categoryColors: Record<string, string> = {
@@ -34,11 +36,17 @@ const complexityColors: Record<string, string> = {
   XL: 'text-red-400',
 };
 
-export function IdeaCard({ idea, onAction, showActions = true, showFire = true, compact = false }: IdeaCardProps) {
+export function IdeaCard({ idea, onAction, showActions = true, showFire = true, compact = false, showNotesInput = false }: IdeaCardProps) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [notes, setNotes] = useState('');
+  const [notesFocused, setNotesFocused] = useState(false);
 
   const toggle = (section: string) => {
     setExpanded(prev => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  const act = (action: 'approve' | 'reject' | 'maybe' | 'fire') => {
+    onAction?.(action, notes.trim() || undefined);
   };
 
   const tags: string[] = idea.tags ? JSON.parse(idea.tags) : [];
@@ -179,31 +187,46 @@ export function IdeaCard({ idea, onAction, showActions = true, showFire = true, 
         </div>
       )}
 
+      {/* Optional decision note — stored with the swipe and fed into preference
+          learning. One line tall; expands to two while focused or holding text. */}
+      {showNotesInput && showActions && onAction && (
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          onFocus={() => setNotesFocused(true)}
+          onBlur={() => setNotesFocused(false)}
+          maxLength={2000}
+          rows={notesFocused || notes.trim() ? 2 : 1}
+          placeholder="Optional note — why this decision? Feeds future idea generation."
+          className="w-full text-sm rounded-lg bg-mc-bg-tertiary border border-mc-border text-mc-text placeholder:text-mc-text-secondary p-2 resize-none focus:outline-none focus:border-mc-accent"
+        />
+      )}
+
       {/* Action buttons */}
       {showActions && onAction && (
         <div className={`grid gap-2 pt-2 ${showFire ? 'grid-cols-4' : 'grid-cols-3'}`}>
           <button
-            onClick={() => onAction('reject')}
+            onClick={() => act('reject')}
             className="min-h-11 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 text-sm font-medium transition-colors"
           >
             Pass
           </button>
           <button
-            onClick={() => onAction('maybe')}
+            onClick={() => act('maybe')}
             className="min-h-11 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-sm font-medium transition-colors"
           >
             Maybe
           </button>
           {showFire && (
             <button
-              onClick={() => onAction('fire')}
+              onClick={() => act('fire')}
               className="min-h-11 rounded-lg bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 text-sm font-medium transition-colors"
             >
               Now!
             </button>
           )}
           <button
-            onClick={() => onAction('approve')}
+            onClick={() => act('approve')}
             className="min-h-11 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400 text-sm font-medium transition-colors"
           >
             Yes
