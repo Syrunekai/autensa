@@ -1820,6 +1820,80 @@ const migrations: Migration[] = [
 
       console.log('[Migration 037] Created jira_sync table with indexes');
     }
+  },
+  {
+    id: '038',
+    name: 'ideas_status_allow_archived',
+    up: (db) => {
+      console.log('[Migration 038] Rebuilding ideas table to allow archived status...');
+
+      // SQLite cannot alter a CHECK constraint in place; the table is rebuilt
+      // with 'archived' added to the status CHECK. Columns are listed
+      // explicitly because databases migrated from older versions have the
+      // similarity/variant columns appended after the timestamps, so column
+      // order is not uniform across installs.
+      db.exec(`
+        CREATE TABLE ideas_new (
+          id TEXT PRIMARY KEY,
+          product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+          cycle_id TEXT REFERENCES research_cycles(id),
+          title TEXT NOT NULL,
+          description TEXT NOT NULL,
+          category TEXT NOT NULL CHECK (category IN (
+            'feature', 'improvement', 'ux', 'performance', 'integration',
+            'infrastructure', 'content', 'growth', 'monetization', 'operations', 'security'
+          )),
+          research_backing TEXT,
+          impact_score REAL,
+          feasibility_score REAL,
+          complexity TEXT CHECK (complexity IN ('S', 'M', 'L', 'XL')),
+          estimated_effort_hours REAL,
+          competitive_analysis TEXT,
+          target_user_segment TEXT,
+          revenue_potential TEXT,
+          technical_approach TEXT,
+          risks TEXT,
+          tags TEXT,
+          source TEXT DEFAULT 'research' CHECK (source IN ('research', 'manual', 'resurfaced', 'feedback')),
+          source_research TEXT,
+          status TEXT DEFAULT 'pending' CHECK (status IN (
+            'pending', 'approved', 'rejected', 'maybe', 'building', 'built', 'shipped', 'archived'
+          )),
+          swiped_at TEXT,
+          task_id TEXT REFERENCES tasks(id),
+          user_notes TEXT,
+          resurfaced_from TEXT REFERENCES ideas(id),
+          resurfaced_reason TEXT,
+          similarity_flag TEXT,
+          auto_suppressed INTEGER DEFAULT 0,
+          suppress_reason TEXT,
+          variant_id TEXT REFERENCES product_program_variants(id),
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now'))
+        )
+      `);
+
+      const columns = [
+        'id', 'product_id', 'cycle_id', 'title', 'description', 'category',
+        'research_backing', 'impact_score', 'feasibility_score', 'complexity',
+        'estimated_effort_hours', 'competitive_analysis', 'target_user_segment',
+        'revenue_potential', 'technical_approach', 'risks', 'tags', 'source',
+        'source_research', 'status', 'swiped_at', 'task_id', 'user_notes',
+        'resurfaced_from', 'resurfaced_reason', 'similarity_flag',
+        'auto_suppressed', 'suppress_reason', 'variant_id', 'created_at', 'updated_at',
+      ].join(', ');
+      db.exec(`INSERT INTO ideas_new (${columns}) SELECT ${columns} FROM ideas`);
+      db.exec(`DROP TABLE ideas`);
+      db.exec(`ALTER TABLE ideas_new RENAME TO ideas`);
+
+      // Recreate the indexes dropped with the old table
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_ideas_product ON ideas(product_id, created_at DESC)`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_ideas_status ON ideas(status)`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_ideas_product_pending ON ideas(product_id, status) WHERE status = 'pending'`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_ideas_variant ON ideas(variant_id)`);
+
+      console.log('[Migration 038] ideas.status now permits archived');
+    }
   }
 ];
 

@@ -16,6 +16,26 @@ export function IdeasList({ productId }: IdeasListProps) {
   const [reloadKey, setReloadKey] = useState(0);
   const [statusFilter, setStatusFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  // Two-tap delete guard: first tap arms the button, second tap deletes.
+  const [armedDeleteId, setArmedDeleteId] = useState<string | null>(null);
+
+  const handleDelete = async (ideaId: string) => {
+    if (armedDeleteId !== ideaId) {
+      setArmedDeleteId(ideaId);
+      return;
+    }
+    setArmedDeleteId(null);
+    try {
+      const res = await fetch(`/api/products/${productId}/ideas/${ideaId}`, { method: 'DELETE' });
+      if (res.ok) {
+        setIdeas(prev => prev.filter(i => i.id !== ideaId));
+      } else {
+        console.error('Failed to delete idea:', res.status);
+      }
+    } catch (error) {
+      console.error('Failed to delete idea:', error);
+    }
+  };
 
   useEffect(() => {
     (async () => {
@@ -40,7 +60,7 @@ export function IdeasList({ productId }: IdeasListProps) {
     })();
   }, [productId, statusFilter, categoryFilter, reloadKey]);
 
-  const statuses = ['', 'pending', 'approved', 'rejected', 'maybe', 'building', 'built', 'shipped'];
+  const statuses = ['', 'pending', 'approved', 'rejected', 'maybe', 'building', 'built', 'shipped', 'archived'];
   const categories = ['', 'feature', 'improvement', 'ux', 'performance', 'integration', 'infrastructure', 'content', 'growth', 'monetization', 'operations', 'security'];
 
   return (
@@ -76,7 +96,21 @@ export function IdeasList({ productId }: IdeasListProps) {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {ideas.map(idea => (
-            <IdeaCard key={idea.id} idea={idea} showActions={false} compact />
+            <div key={idea.id} className="space-y-2">
+              <IdeaCard idea={idea} showActions={false} compact />
+              {idea.status === 'archived' && (
+                <button
+                  onClick={() => handleDelete(idea.id)}
+                  className={`w-full min-h-9 text-xs rounded-lg border transition-colors ${
+                    armedDeleteId === idea.id
+                      ? 'bg-red-500/30 border-red-500 text-red-300 font-semibold'
+                      : 'bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20'
+                  }`}
+                >
+                  {armedDeleteId === idea.id ? 'Tap again to permanently delete' : 'Delete'}
+                </button>
+              )}
+            </div>
           ))}
         </div>
       )}

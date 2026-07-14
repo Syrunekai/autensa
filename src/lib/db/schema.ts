@@ -468,7 +468,7 @@ CREATE TABLE IF NOT EXISTS ideas (
   source TEXT DEFAULT 'research' CHECK (source IN ('research', 'manual', 'resurfaced', 'feedback')),
   source_research TEXT,
   status TEXT DEFAULT 'pending' CHECK (status IN (
-    'pending', 'approved', 'rejected', 'maybe', 'building', 'built', 'shipped'
+    'pending', 'approved', 'rejected', 'maybe', 'building', 'built', 'shipped', 'archived'
   )),
   swiped_at TEXT,
   task_id TEXT REFERENCES tasks(id),

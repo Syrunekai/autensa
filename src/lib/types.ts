@@ -443,7 +443,7 @@ export type IdeaCategory =
   | 'feature' | 'improvement' | 'ux' | 'performance' | 'integration'
   | 'infrastructure' | 'content' | 'growth' | 'monetization' | 'operations' | 'security';
 
-export type IdeaStatus = 'pending' | 'approved' | 'rejected' | 'maybe' | 'building' | 'built' | 'shipped';
+export type IdeaStatus = 'pending' | 'approved' | 'rejected' | 'maybe' | 'building' | 'built' | 'shipped' | 'archived';
 
 export type IdeaSource = 'research' | 'manual' | 'resurfaced' | 'feedback';
 

@@ -523,6 +523,23 @@ export function createManualIdea(productId: string, input: {
   return queryOne<Idea>('SELECT * FROM ideas WHERE id = ?', [id])!;
 }
 
+/**
+ * Permanently delete an idea and its similarity embedding.
+ * Restricted to archived ideas: archiving is the staging step that removes an
+ * idea from play, so deletion can never touch an idea still in use. Swipe
+ * history rows referencing a deleted idea are kept; the ideation prompt's
+ * history builder falls back to a content-free line for them.
+ */
+export function deleteArchivedIdea(ideaId: string): 'deleted' | 'not_found' | 'not_archived' {
+  const idea = queryOne<Idea>('SELECT * FROM ideas WHERE id = ?', [ideaId]);
+  if (!idea) return 'not_found';
+  if (idea.status !== 'archived') return 'not_archived';
+
+  run('DELETE FROM idea_embeddings WHERE idea_id = ?', [ideaId]);
+  run('DELETE FROM ideas WHERE id = ?', [ideaId]);
+  return 'deleted';
+}
+
 export function updateIdea(ideaId: string, updates: Partial<{
   title: string;
   description: string;
