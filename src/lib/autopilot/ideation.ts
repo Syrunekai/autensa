@@ -8,14 +8,43 @@ import { batchCheckSimilarity, storeEmbedding, checkSimilarity } from './similar
 import { getResearchPrograms } from './ab-testing';
 import type { Product, Idea, ResearchCycle, SwipeHistoryEntry } from '@/lib/types';
 
+/** Swipe history row joined with the swiped idea's title and description. */
+type SwipeHistoryWithIdea = SwipeHistoryEntry & {
+  idea_title?: string | null;
+  idea_description?: string | null;
+};
+
+/** Maximum length of the description excerpt included per history line. */
+const HISTORY_BRIEF_MAX_CHARS = 250;
+
+/**
+ * Extract a short excerpt from an idea description for the swipe history
+ * section of the ideation prompt. Prefers the first complete sentence;
+ * falls back to a hard cut when no sentence boundary occurs within the cap.
+ */
+function briefFromDescription(description: string): string {
+  const text = description.trim().replace(/\s+/g, ' ');
+  const boundary = text.search(/[.!?](\s|$)/);
+  if (boundary !== -1 && boundary < HISTORY_BRIEF_MAX_CHARS) {
+    return text.slice(0, boundary + 1);
+  }
+  if (text.length <= HISTORY_BRIEF_MAX_CHARS) return text;
+  return text.slice(0, 200).trimEnd() + '…';
+}
+
 function buildIdeationPrompt(
   product: Product,
   researchReport: string | null,
-  swipeHistory: SwipeHistoryEntry[],
+  swipeHistory: SwipeHistoryWithIdea[],
   learnedPreferences?: string
 ): string {
   const historyText = swipeHistory.length > 0
-    ? swipeHistory.map(s => `- ${s.action}: [${s.category}] (impact: ${s.impact_score}, feasibility: ${s.feasibility_score}, complexity: ${s.complexity})`).join('\n')
+    ? swipeHistory.map(s => {
+        const content = s.idea_title
+          ? `"${s.idea_title}"${s.idea_description ? ` — ${briefFromDescription(s.idea_description)}` : ''} `
+          : '';
+        return `- ${s.action}: ${content}[${s.category}] (impact: ${s.impact_score}, feasibility: ${s.feasibility_score}, complexity: ${s.complexity})`;
+      }).join('\n')
     : 'No swipe history yet.';
 
   return `You are a Product Ideation Agent for Mission Control. Generate high-quality feature ideas based on research findings and user preferences.
@@ -27,7 +56,7 @@ function buildIdeationPrompt(
 3. Review the swipe history — understand what the user approves and rejects.
 4. Generate 10-20 ideas as a JSON array, each with:
    - title: specific and actionable
-   - description: detailed enough to build from
+   - description: open with one self-contained sentence stating what the idea is and who it serves, then elaborate in enough detail to build from
    - category: one of feature, improvement, ux, performance, integration, infrastructure, content, growth, monetization, operations, security
    - research_backing: evidence from research
    - impact_score: 1-10
@@ -83,8 +112,11 @@ export async function runIdeationCycle(productId: string, cycleId?: string, exis
     cycleId = latestCycle?.id;
   }
 
-  const swipeHistory = queryAll<SwipeHistoryEntry>(
-    'SELECT * FROM swipe_history WHERE product_id = ? ORDER BY created_at DESC LIMIT 100',
+  const swipeHistory = queryAll<SwipeHistoryWithIdea>(
+    `SELECT sh.*, i.title AS idea_title, i.description AS idea_description
+     FROM swipe_history sh
+     LEFT JOIN ideas i ON i.id = sh.idea_id
+     WHERE sh.product_id = ? ORDER BY sh.created_at DESC LIMIT 100`,
     [productId]
   );
 

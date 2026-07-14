@@ -175,7 +175,7 @@ export function rebuildPreferenceModel(productId: string): void {
   // Approved examples
   if (approvedIdeas.length > 0) {
     lines.push('### Examples of Approved Ideas');
-    for (const idea of approvedIdeas.slice(0, 5)) {
+    for (const idea of approvedIdeas.slice(0, 10)) {
       lines.push(`- **${idea.title}** [${idea.category}]${idea.user_notes ? ` — "${idea.user_notes}"` : ''}`);
     }
     lines.push('');
@@ -184,7 +184,7 @@ export function rebuildPreferenceModel(productId: string): void {
   // Rejected examples
   if (rejectedIdeas.length > 0) {
     lines.push('### Examples of Rejected Ideas');
-    for (const idea of rejectedIdeas.slice(0, 5)) {
+    for (const idea of rejectedIdeas.slice(0, 10)) {
       lines.push(`- **${idea.title}** [${idea.category}]${idea.user_notes ? ` — "${idea.user_notes}"` : ''}`);
     }
     lines.push('');
